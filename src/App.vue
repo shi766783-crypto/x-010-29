@@ -1,7 +1,8 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTravelStore } from './stores/travel'
+import AchievementToast from './components/common/AchievementToast.vue'
 
 const route = useRoute()
 const store = useTravelStore()
@@ -16,6 +17,12 @@ const navItems = [
 
 const unlockedCount = computed(() => store.achievements.filter((a) => a.unlocked).length)
 const totalTrips = computed(() => store.plans.length)
+
+// 运行时检测新解锁徽章；启动基线已在 store.load() 中静默建立，不会补发历史提醒
+watch(
+  () => store.achievements,
+  () => store.syncAchievementToasts()
+)
 </script>
 
 <template>
@@ -61,5 +68,7 @@ const totalTrips = computed(() => store.plans.length)
         <router-view />
       </div>
     </main>
+
+    <AchievementToast />
   </div>
 </template>

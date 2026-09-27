@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { planStorage } from '../services/storage'
+import { planStorage, achievementNotifiedStorage } from '../services/storage'
 import { generateLuggageTemplate, getDestinationType } from '../services/luggage'
 import { generateDefaultTodos } from '../services/todo'
 import { computeAchievements, TOTAL_ACHIEVEMENTS } from '../services/achievements'
@@ -17,10 +17,15 @@ function buildMemberNames(input) {
 export const useTravelStore = defineStore('travel', {
   state: () => ({
     plans: [],
+    // 已弹过解锁提醒的徽章 id（同一徽章只提醒一次）
+    notifiedAchievementIds: [],
+    // 待展示的解锁提醒队列（每次只取队首，避免刷屏）
+    achievementToasts: [],
   }),
 
   getters: {
     achievements: (state) => computeAchievements(state.plans),
+    currentAchievementToast: (state) => state.achievementToasts[0] || null,
     totalAchievements: () => TOTAL_ACHIEVEMENTS,
     dashboardStats: (state) => computeDashboardStats(state.plans),
     leaderboard: (state) => computeMemberLeaderboard(state.plans),
@@ -31,9 +36,39 @@ export const useTravelStore = defineStore('travel', {
     // ===== 持久化 =====
     load() {
       this.plans = planStorage.read([])
+      this.initAchievementNotifications()
     },
     persist() {
       planStorage.write(this.plans)
+    },
+
+    // ===== 成就解锁提醒 =====
+    // 启动时建立提醒基线：已解锁的历史徽章全部静默标记为已提醒，不补发
+    initAchievementNotifications() {
+      const saved = achievementNotifiedStorage.read([])
+      const known = Array.isArray(saved) ? saved : []
+      const unlockedIds = this.achievements
+        .filter((a) => a.unlocked)
+        .map((a) => a.id)
+      this.notifiedAchievementIds = [...new Set([...known, ...unlockedIds])]
+      achievementNotifiedStorage.write(this.notifiedAchievementIds)
+    },
+
+    // 检测新解锁的徽章并入队；已提醒过的徽章不再提醒
+    syncAchievementToasts() {
+      const fresh = this.achievements.filter(
+        (a) => a.unlocked && !this.notifiedAchievementIds.includes(a.id)
+      )
+      if (!fresh.length) return
+      // 入队即标记，保证即使队列尚未展示完也不会重复提醒
+      this.notifiedAchievementIds.push(...fresh.map((a) => a.id))
+      achievementNotifiedStorage.write(this.notifiedAchievementIds)
+      this.achievementToasts.push(...fresh.map((a) => ({ ...a })))
+    },
+
+    // 关闭当前提醒并展示队列中的下一条
+    dismissAchievementToast() {
+      this.achievementToasts.shift()
     },
 
     // ===== 出行计划 =====

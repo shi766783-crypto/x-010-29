@@ -27,3 +27,6 @@ export function createStorage(namespace) {
 }
 
 export const planStorage = createStorage('plans')
+
+// 已弹过解锁提醒的徽章 id，与计划数据分开存储
+export const achievementNotifiedStorage = createStorage('achievement-notified')
