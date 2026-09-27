@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTravelStore } from './stores/travel'
+import AchievementToast from './components/common/AchievementToast.vue'
 
 const route = useRoute()
 const store = useTravelStore()
@@ -61,5 +62,7 @@ const totalTrips = computed(() => store.plans.length)
         <router-view />
       </div>
     </main>
+
+    <AchievementToast />
   </div>
 </template>

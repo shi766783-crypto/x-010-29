@@ -27,3 +27,4 @@ export function createStorage(namespace) {
 }
 
 export const planStorage = createStorage('plans')
+export const achievementNoticeStorage = createStorage('achievement-notices')

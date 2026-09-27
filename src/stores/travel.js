@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { planStorage } from '../services/storage'
+import { planStorage, achievementNoticeStorage } from '../services/storage'
 import { generateLuggageTemplate, getDestinationType } from '../services/luggage'
 import { generateDefaultTodos } from '../services/todo'
-import { computeAchievements, TOTAL_ACHIEVEMENTS } from '../services/achievements'
+import { ACHIEVEMENTS, computeAchievements, TOTAL_ACHIEVEMENTS } from '../services/achievements'
 import { computeDashboardStats, computeMemberLeaderboard } from '../services/stats'
 import { daysBetween } from '../utils/format'
 import { uid } from '../utils/id'
@@ -17,6 +17,10 @@ function buildMemberNames(input) {
 export const useTravelStore = defineStore('travel', {
   state: () => ({
     plans: [],
+    // 已提醒过的徽章 id（持久化，同一徽章只提醒一次）
+    notifiedAchievementIds: [],
+    // 待展示的新解锁徽章（轻量提醒，关闭后清空）
+    pendingUnlockNotices: [],
   }),
 
   getters: {
@@ -31,9 +35,40 @@ export const useTravelStore = defineStore('travel', {
     // ===== 持久化 =====
     load() {
       this.plans = planStorage.read([])
+      // 提醒基线：历史已解锁的徽章直接标记为已提醒，加载旧数据时不补发提醒
+      const saved = achievementNoticeStorage.read([])
+      const notified = Array.isArray(saved) ? saved : []
+      this.notifiedAchievementIds = [...new Set([...notified, ...this._unlockedAchievementIds()])]
+      achievementNoticeStorage.write(this.notifiedAchievementIds)
     },
     persist() {
       planStorage.write(this.plans)
+    },
+
+    // ===== 徽章解锁提醒 =====
+    _unlockedAchievementIds() {
+      return computeAchievements(this.plans)
+        .filter((a) => a.unlocked)
+        .map((a) => a.id)
+    },
+
+    // 出行数据变更后调用：发现新解锁的徽章时推送一次轻量提醒
+    syncAchievementNotices() {
+      const fresh = this._unlockedAchievementIds().filter(
+        (id) => !this.notifiedAchievementIds.includes(id)
+      )
+      if (!fresh.length) return
+      this.notifiedAchievementIds = [...this.notifiedAchievementIds, ...fresh]
+      achievementNoticeStorage.write(this.notifiedAchievementIds)
+      const queued = this.pendingUnlockNotices.map((a) => a.id)
+      const additions = ACHIEVEMENTS.filter(
+        (a) => fresh.includes(a.id) && !queued.includes(a.id)
+      )
+      this.pendingUnlockNotices = [...this.pendingUnlockNotices, ...additions]
+    },
+
+    dismissUnlockNotices() {
+      this.pendingUnlockNotices = []
     },
 
     // ===== 出行计划 =====
